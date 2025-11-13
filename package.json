@@ -1,0 +1,56 @@
+{
+  "name": "context-combiner",
+  "displayName": "Context Combiner",
+  "description": "Combine multiple files into a single formatted output with preview",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:contextCombiner"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "context-combiner-container",
+          "title": "Context Combiner",
+          "icon": "$(files)"
+        }
+      ]
+    },
+    "views": {
+      "context-combiner-container": [
+        {
+          "type": "webview",
+          "id": "contextCombiner",
+          "name": "File Selector"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "context-combiner.refresh",
+        "title": "Refresh Files",
+        "icon": "$(refresh)"
+      }
+    ]
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "node ./test/runTest.js"
+  },
+   "devDependencies": {
+     "@types/vscode": "^1.106.0",
+     "@types/mocha": "^10.0.10",
+     "@types/node": "22.x",
+     "eslint": "^9.39.1",
+     "@vscode/test-cli": "^0.0.12",
+     "@vscode/test-electron": "^2.5.2"
+   }
+} 

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">    <title>Context Combiner</title>
+    <style>
+        /* Base styles matching VS Code theme */
+        body {
+            padding: 0;
+            margin: 0;
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            color: var(--vscode-foreground);
+            background-color: var(--vscode-editor-background);
+        }
+
+        /* Container for all content */
+        .container {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* Header section */
+        .header {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .header h3 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        /* Button styles */
+        button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 2px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+
+        button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* File list section */
+        .file-list {
+            flex: 0 0 auto;
+            max-height: 40vh;
+            overflow-y: auto;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 3px;
+            margin-bottom: 10px;
+            background-color: var(--vscode-input-background);
+        }
+
+        .file-item {
+            padding: 6px 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            font-size: 12px;
+        }
+
+        .file-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .file-item label {
+            cursor: pointer;
+            flex: 1;
+            user-select: none;
+        }
+
+        /* Preview section */
+        .preview-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .preview-header h3 {
+            margin: 0;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .preview-info {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .preview-content {
+            flex: 1;
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 3px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* Loading state */
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--vscode-descriptionForeground);
+            font-style: italic;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 20px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        /* File separator in preview */
+        .file-separator {
+            color: var(--vscode-textLink-foreground);
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        /* Scrollbar styling for webkit browsers */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--vscode-scrollbarSlider-background);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--vscode-scrollbarSlider-hoverBackground);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--vscode-scrollbarSlider-activeBackground);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with action buttons -->
+        <div class="header">
+            <h3>📋 Context Combiner</h3>
+            <div>
+                <button id="selectAllBtn">Select All</button>
+                <button id="deselectAllBtn">Deselect All</button>
+                <button id="copyBtn" disabled>📋 Copy Combined Content</button>
+                <button id="saveBtn" disabled>💾 Save as .txt</button>
+            </div>
+        </div>
+
+        <!-- File list with checkboxes -->
+        <div class="file-list" id="fileList">
+            <div class="loading">Loading files...</div>
+        </div>
+
+        <!-- Preview section -->
+        <div class="preview-section">
+            <div class="preview-header">
+                <h3>Preview</h3>
+                <span class="preview-info" id="previewInfo">Select files to preview</span>
+            </div>
+            <div class="preview-content" id="previewContent">
+                <div class="empty-state">Select files from the list above to see a preview of the combined content.</div>
+            </div>
+        </div>
+    </div>
+
+    <script  >
+        // Get VS Code API for communication with extension
+        const vscode = acquireVsCodeApi();
+
+        // State management
+        let allFiles = [];
+        let selectedFiles = new Set();
+        let fileContents = new Map(); // Cache file contents
+
+        // DOM elements
+        const fileListEl = document.getElementById('fileList');
+        const previewContentEl = document.getElementById('previewContent');
+        const previewInfoEl = document.getElementById('previewInfo');
+        const copyBtn = document.getElementById('copyBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deselectAllBtn = document.getElementById('deselectAllBtn');
+
+        /**
+         * Initialize the extension - request file list from VS Code
+         */
+        function init() {
+            vscode.postMessage({ type: 'getFiles' });
+        }
+
+        /**
+         * Handle messages from the extension
+         */
+        window.addEventListener('message', event => {
+            const message = event.data;
+            
+            switch (message.type) {
+                case 'fileList':
+                    // Received list of files from extension
+                    handleFileList(message.files);
+                    break;
+                case 'fileContent':
+                    // Received content of a specific file
+                    handleFileContent(message.path, message.content);
+                    break;
+            }
+        });
+
+        /**
+         * Display the list of files with checkboxes
+         */
+        function handleFileList(files) {
+            allFiles = files;
+            
+            if (files.length === 0) {
+                fileListEl.innerHTML = '<div class="empty-state">No files found in workspace</div>';
+                return;
+            }
+
+            // Create checkbox for each file
+            fileListEl.innerHTML = files.map((file, index) => `
+                <div class="file-item">
+                    <input type="checkbox" id="file-${index}" data-path="${file.path}">
+                    <label for="file-${index}">${file.path}</label>
+                </div>
+            `).join('');
+
+            // Add event listeners to checkboxes
+            fileListEl.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', handleFileSelection);
+            });
+        }
+
+        /**
+         * Handle file selection/deselection
+         */
+        function handleFileSelection(event) {
+            const filePath = event.target.dataset.path;
+            
+            if (event.target.checked) {
+                selectedFiles.add(filePath);
+                // Request file content if not already cached
+                if (!fileContents.has(filePath)) {
+                    vscode.postMessage({ 
+                        type: 'readFile', 
+                        path: filePath 
+                    });
+                }
+            } else {
+                selectedFiles.delete(filePath);
+            }
+
+            updatePreview();
+            updateButtons();
+        }
+
+        /**
+         * Store file content in cache and update preview
+         */
+        function handleFileContent(path, content) {
+            fileContents.set(path, content);
+            updatePreview();
+        }
+
+        /**
+         * Update the preview pane with combined content
+         */
+        function updatePreview() {
+            if (selectedFiles.size === 0) {
+                previewContentEl.innerHTML = '<div class="empty-state">Select files from the list above to see a preview of the combined content.</div>';
+                previewInfoEl.textContent = 'Select files to preview';
+                return;
+            }
+
+            // Count how many files have loaded content
+            const loadedCount = Array.from(selectedFiles).filter(f => fileContents.has(f)).length;
+            previewInfoEl.textContent = `${selectedFiles.size} files selected (${loadedCount} loaded)`;
+
+            // Generate preview
+            const preview = formatCombinedContent();
+            previewContentEl.textContent = preview;
+        }
+
+        /**
+         * Format the combined content in the specified format
+         */
+        function formatCombinedContent() {
+            const parts = [];
+            
+            for (const filePath of selectedFiles) {
+                const content = fileContents.get(filePath);
+                if (content !== undefined) {
+                    parts.push(`--- ${filePath} ---`);
+                    parts.push(content);
+                } else {
+                    parts.push(`--- ${filePath} ---`);
+                    parts.push('[Loading...]');
+                }
+            }
+
+            return parts.join('\n');
+        }
+
+        /**
+         * Update button states based on selection
+         */
+        function updateButtons() {
+            const hasSelection = selectedFiles.size > 0;
+            const allLoaded = Array.from(selectedFiles).every(f => fileContents.has(f));
+            
+            copyBtn.disabled = !hasSelection || !allLoaded;
+            saveBtn.disabled = !hasSelection || !allLoaded;
+        }
+
+        /**
+         * Copy combined content to clipboard
+         */
+        copyBtn.addEventListener('click', () => {
+            const content = formatCombinedContent();
+            vscode.postMessage({ 
+                type: 'copyToClipboard', 
+                content: content 
+            });
+        });
+
+        /**
+         * Save combined content as a text file
+         */
+        saveBtn.addEventListener('click', () => {
+            const content = formatCombinedContent();
+            vscode.postMessage({ 
+                type: 'saveFile', 
+                content: content 
+            });
+        });
+
+        /**
+         * Select all files
+         */
+        selectAllBtn.addEventListener('click', () => {
+            fileListEl.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                if (!checkbox.checked) {
+                    checkbox.checked = true;
+                    handleFileSelection({ target: checkbox });
+                }
+            });
+        });
+
+        /**
+         * Deselect all files
+         */
+        deselectAllBtn.addEventListener('click', () => {
+            fileListEl.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                if (checkbox.checked) {
+                    checkbox.checked = false;
+                    handleFileSelection({ target: checkbox });
+                }
+            });
+        });
+
+        // Initialize when page loads
+        init();
+    </script>
+</body>
+</html>
