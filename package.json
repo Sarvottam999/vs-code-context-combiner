@@ -4,7 +4,7 @@
   "description": "Combine multiple files into a single formatted output with preview",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "Other"
