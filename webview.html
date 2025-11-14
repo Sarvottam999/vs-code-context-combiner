@@ -236,6 +236,16 @@
       ::-webkit-scrollbar-thumb:hover {
         background: var(--vscode-scrollbarSlider-activeBackground);
       }
+
+
+      .file-item-content.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.file-item-content.selected:hover {
+  background-color: var(--vscode-list-activeSelectionBackground);
+}
     </style>
   </head>
   <body>
@@ -244,6 +254,7 @@
       <div class="header">
         <h3>📋 Context Combiner</h3>
         <div>
+          <button id="openTabsBtn">📑 Select Tabs</button>
           <button id="selectAllBtn">Select All</button>
           <button id="deselectAllBtn">Deselect All</button>
           <button id="copyBtn" disabled>📋 Copy Combined Content</button>
@@ -293,6 +304,16 @@
       const saveBtn = document.getElementById("saveBtn");
       const selectAllBtn = document.getElementById("selectAllBtn");
       const deselectAllBtn = document.getElementById("deselectAllBtn");
+      /**
+ * Get files from currently open tabs
+ */
+const openTabsBtn = document.getElementById("openTabsBtn");
+openTabsBtn.addEventListener("click", () => {
+  vscode.postMessage({
+    type: "getOpenTabs"
+  });
+});
+      
 
       /**
        * Initialize the extension - request file list from VS Code
@@ -322,6 +343,9 @@
         folderState = message.state || {};
         console.log('Received folder state:', folderState);
         // Restore will be called after file list is rendered
+        break;
+      case "openTabsList":
+        handleOpenTabsList(message.files);
         break;
     }
 });
@@ -367,26 +391,28 @@
       /**
        * Handle file selection/deselection
        */
-      function handleFileSelection(event) {
-        const filePath = event.target.dataset.path;
+       function handleFileSelection(event) {
+  const filePath = event.target.dataset.path;
+  const fileItem = event.target.closest('.file-item-content');
 
-        if (event.target.checked) {
-          selectedFiles.add(filePath);
-          // Request file content if not already cached
-          if (!fileContents.has(filePath)) {
-            vscode.postMessage({
-              type: "readFile",
-              path: filePath,
-            });
-          }
-        } else {
-          selectedFiles.delete(filePath);
-        }
+  if (event.target.checked) {
+    selectedFiles.add(filePath);
+    if (fileItem) fileItem.classList.add('selected');
+    // Request file content if not already cached
+    if (!fileContents.has(filePath)) {
+      vscode.postMessage({
+        type: "readFile",
+        path: filePath,
+      });
+    }
+  } else {
+    selectedFiles.delete(filePath);
+    if (fileItem) fileItem.classList.remove('selected');
+  }
 
-        updatePreview();
-        updateButtons();
-      }
-
+  updatePreview();
+  updateButtons();
+}
       /**
        * Build a tree structure from flat file list
        */
@@ -552,6 +578,25 @@ function restoreFolderState() {
         fileContents.set(path, content);
         updatePreview();
       }
+
+      /**
+ * Handle open tabs list and select them
+ */
+function handleOpenTabsList(openFiles) {
+  if (!openFiles || openFiles.length === 0) {
+    return;
+  }
+
+  openFiles.forEach(filePath => {
+    // Find the checkbox for this file
+    const checkbox = document.querySelector(`input[data-path="${filePath}"]`);
+    if (checkbox && !checkbox.checked) {
+      checkbox.checked = true;
+      // Trigger selection handling
+      handleFileSelection({ target: checkbox });
+    }
+  });
+}
 
       /**
        * Update the preview pane with combined content

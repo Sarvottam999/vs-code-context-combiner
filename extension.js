@@ -79,6 +79,9 @@ class ContextCombinerViewProvider {
                         state: this._folderState
                     });
                     break;
+                case 'getOpenTabs':
+                    await this._sendOpenTabs();
+                    break;
             }
         });
 
@@ -254,6 +257,40 @@ if (this._view) {
         }
         return text;
     }
+
+    /**
+ * Get all currently open tabs and send to webview
+ */
+async _sendOpenTabs() {
+    if (!this._view) return;
+
+    try {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) return;
+
+        // Get all open text editors
+        const openTabs = vscode.window.tabGroups.all
+            .flatMap(group => group.tabs)
+            .filter(tab => tab.input instanceof vscode.TabInputText)
+            .map(tab => {
+                const uri = tab.input.uri;
+                return vscode.workspace.asRelativePath(uri);
+            })
+            .filter(path => this._isTextFile(path));
+
+        // Remove duplicates
+        const uniqueTabs = [...new Set(openTabs)];
+
+        this._view.webview.postMessage({
+            type: 'openTabsList',
+            files: uniqueTabs
+        });
+    } catch (error) {
+        console.error('Error getting open tabs:', error);
+        vscode.window.showErrorMessage('Failed to get open tabs: ' + error.message);
+    }
+}
+
 }
 
 /**
