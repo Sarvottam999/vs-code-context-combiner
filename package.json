@@ -2,6 +2,12 @@
   "name": "context-combiner",
   "displayName": "Context Combiner",
   "description": "Combine multiple files into a single formatted output with preview",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sarvottam999/vs-code-context-combiner.git"
+},
+"license": "MIT",
+
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.80.0"
