@@ -32,6 +32,7 @@ class ContextCombinerViewProvider {
     constructor(extensionUri) {
         this._extensionUri = extensionUri;
         this._view = undefined;
+        this._folderState = {}; // Store folder expansion state
     }
 
     /**
@@ -56,27 +57,44 @@ class ContextCombinerViewProvider {
             console.log('Received message from webview:', data.type);
             switch (data.type) {
                 case 'getFiles':
-                    // Request to get all workspace files
                     await this._sendFileList();
                     break;
                 case 'readFile':
-                    // Request to read a specific file's content
                     await this._readFile(data.path);
                     break;
                 case 'saveFile':
-                    // Request to save combined content to a file
                     await this._saveFile(data.content);
                     break;
                 case 'copyToClipboard':
-                    // Copy content to clipboard
                     await vscode.env.clipboard.writeText(data.content);
                     vscode.window.showInformationMessage('Content copied to clipboard!');
+                    break;
+                // ADD THIS NEW CASE:
+                case 'saveFolderState':
+                    this._folderState = data.state;
+                    break;
+                case 'getFolderState':
+                    this._view.webview.postMessage({
+                        type: 'folderState',
+                        state: this._folderState
+                    });
                     break;
             }
         });
 
         // Send initial file list when view loads
-        this._sendFileList();
+       // Send initial file list when view loads
+// Send initial file list when view loads
+this._sendFileList();
+
+// Send stored folder state immediately
+if (this._view) {
+    this._view.webview.postMessage({
+        type: 'folderState',
+        state: this._folderState
+    });
+}
+// / Small delay to ensure webview is ready
     }
 
     /**

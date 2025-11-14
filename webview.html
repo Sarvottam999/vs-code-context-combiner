@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
-    http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src 'unsafe-inline' 'nonce-{{CSP_NONCE}}'; script-src 'unsafe-inline' 'nonce-{{CSP_NONCE}}';"
-  />
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
+    />
     <title>Context Combiner</title>
     <style>
       /* Base styles matching VS Code theme */
@@ -131,26 +131,26 @@
       }
 
       .folder-icon {
-  margin-right: 4px;
-  font-size: 10px;
-  width: 12px;
-  display: inline-block;
-  transition: transform 0.1s;
-  transform: rotate(0deg);
-}
+        margin-right: 4px;
+        font-size: 10px;
+        width: 12px;
+        display: inline-block;
+        transition: transform 0.1s;
+        transform: rotate(0deg);
+      }
 
-.folder-icon.collapsed {
-  transform: rotate(90deg);
-}
+      .folder-icon.collapsed {
+        transform: rotate(90deg);
+      }
 
       .folder-name {
         font-weight: 500;
       }
 
       .folder-children {
-  padding-left: 16px;
-  display: none;
-}
+        padding-left: 16px;
+        display: none;
+      }
       /* File icon */
       .file-icon {
         margin-right: 4px;
@@ -274,16 +274,17 @@
     </div>
 
     <script>
-      console.log('##########Webview script loaded');
+      console.log("##########Webview script loaded");
       // Get VS Code API for communication with extension
       const vscode = acquireVsCodeApi();
-      console.log('##########VS Code API acquired');
+      console.log("##########VS Code API acquired");
 
+      // State management
       // State management
       let allFiles = [];
       let selectedFiles = new Set();
       let fileContents = new Map(); // Cache file contents
-
+      let folderState = {}; // Store which folders are expanded
       // DOM elements
       const fileListEl = document.getElementById("fileList");
       const previewContentEl = document.getElementById("previewContent");
@@ -297,27 +298,33 @@
        * Initialize the extension - request file list from VS Code
        */
        function init() {
-        console.log('##########Initializing webview - requesting files');
-        vscode.postMessage({ type: "getFiles" });
-      }
-
+    console.log('##########Initializing webview - requesting files');
+    // Request folder state first
+    vscode.postMessage({ type: "getFolderState" });
+    // Then request files (which will trigger restoration)
+    vscode.postMessage({ type: "getFiles" });
+}
       /**
        * Handle messages from the extension
        */
        window.addEventListener("message", (event) => {
-        const message = event.data;
-        console.log('##########Webview received message:', message.type);
-        switch (message.type) {
-          case "fileList":
-            // Received list of files from extension
-            handleFileList(message.files);
-            break;
-          case "fileContent":
-            // Received content of a specific file
-            handleFileContent(message.path, message.content);
-            break;
-        }
-      });
+    const message = event.data;
+    console.log('##########Webview received message:', message.type);
+    switch (message.type) {
+      case "fileList":
+        handleFileList(message.files);
+        break;
+      case "fileContent":
+        handleFileContent(message.path, message.content);
+        break;
+      case "folderState":
+        // Just store the state, don't restore yet
+        folderState = message.state || {};
+        console.log('Received folder state:', folderState);
+        // Restore will be called after file list is rendered
+        break;
+    }
+});
 
       /**
        * Display the list of files with checkboxes
@@ -353,8 +360,10 @@
       toggleFolder(event, this);
     });
   });
+
+  // ADD THIS: Restore folder state after rendering
+  restoreFolderState();
 }
-      
       /**
        * Handle file selection/deselection
        */
@@ -450,8 +459,8 @@
             .join("");
         }
 
-        const folderId = `folder-${Math.random().toString(36).substr(2, 9)}`;
-        const childrenHtml = sortedChildren
+        const folderId = `folder-${node.name.replace(/[^a-zA-Z0-9]/g, '_')}-${level}`;
+                const childrenHtml = sortedChildren
           .map((child) => renderTree(child, level + 1))
           .join("");
 
@@ -475,21 +484,65 @@
        * Toggle folder expansion
        */
        function toggleFolder(event, header) {
-  const folderId = header.dataset.folderId;
-  const folderChildren = document.getElementById(folderId);
-  const icon = header.querySelector(".folder-icon");
+    const folderId = header.dataset.folderId;
+    const folderChildren = document.getElementById(folderId);
+    const icon = header.querySelector(".folder-icon");
 
-  if (folderChildren && icon) {
-    const isCurrentlyCollapsed = folderChildren.style.display === "none" || !folderChildren.style.display;
-    
-    if (isCurrentlyCollapsed) {
-      folderChildren.style.display = "block";
-      icon.classList.remove("collapsed");
-    } else {
-      folderChildren.style.display = "none";
-      icon.classList.add("collapsed");
+    if (folderChildren && icon) {
+        const isCurrentlyCollapsed = folderChildren.style.display === "none" || !folderChildren.style.display;
+        
+        if (isCurrentlyCollapsed) {
+            folderChildren.style.display = "block";
+            icon.classList.remove("collapsed");
+            folderState[folderId] = 'expanded';
+        } else {
+            folderChildren.style.display = "none";
+            icon.classList.add("collapsed");
+            folderState[folderId] = 'collapsed';
+        }
+        
+        console.log('Toggled folder:', folderId, 'New state:', folderState[folderId]);
+        console.log('Current folder state:', folderState);
+        
+        // Save state to extension
+        vscode.postMessage({
+            type: 'saveFolderState',
+            state: folderState
+        });
     }
-  }
+}
+      /**
+       * Restore folder expansion state from saved state
+       */
+    /**
+ * Restore folder expansion state from saved state
+ */
+function restoreFolderState() {
+    console.log('Restoring folder state:', folderState);
+    
+    if (!folderState || Object.keys(folderState).length === 0) {
+        console.log('No folder state to restore');
+        return;
+    }
+    
+    Object.keys(folderState).forEach(folderId => {
+        const folderChildren = document.getElementById(folderId);
+        const header = document.querySelector(`[data-folder-id="${folderId}"]`);
+        
+        console.log(`Restoring folder ${folderId}:`, folderState[folderId]);
+        
+        if (folderChildren && header) {
+            const icon = header.querySelector(".folder-icon");
+            
+            if (folderState[folderId] === 'expanded') {
+                folderChildren.style.display = "block";
+                if (icon) icon.classList.remove("collapsed");
+            } else if (folderState[folderId] === 'collapsed') {
+                folderChildren.style.display = "none";
+                if (icon) icon.classList.add("collapsed");
+            }
+        }
+    });
 }
 
       /**
