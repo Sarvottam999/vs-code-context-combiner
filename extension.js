@@ -8,6 +8,7 @@ const path = require('path');
  */
 function activate(context) {
     console.log('Context Combiner extension is now active');
+    console.log('Extension URI:', context.extensionUri.toString());
 
     // Register the webview provider for our sidebar
     const provider = new ContextCombinerViewProvider(context.extensionUri);
@@ -37,6 +38,8 @@ class ContextCombinerViewProvider {
      * Called when the view is first shown or after being hidden
      */
     resolveWebviewView(webviewView, context, _token) {
+        console.log('resolveWebviewView called - webview is being created');
+
         this._view = webviewView;
 
         // Configure webview settings
@@ -50,6 +53,7 @@ class ContextCombinerViewProvider {
 
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(async (data) => {
+            console.log('Received message from webview:', data.type);
             switch (data.type) {
                 case 'getFiles':
                     // Request to get all workspace files
@@ -86,10 +90,15 @@ class ContextCombinerViewProvider {
      * Get all files in the workspace and send to webview
      */
     async _sendFileList() {
-        if (!this._view) return;
+        console.log('_sendFileList called');
+        if (!this._view) {
+            console.log('No view available');
+            return;
+        }
 
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
+            console.log('No workspace folder found');
             this._view.webview.postMessage({ 
                 type: 'fileList', 
                 files: [] 
@@ -103,6 +112,7 @@ class ContextCombinerViewProvider {
                 '**/*', // Include all files
                 '{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/.vscode/**,**/out/**}' // Exclude patterns
             );
+            console.log(`Found ${files.length} files`);
 
             // Convert URIs to relative paths and filter text files
             const fileList = files

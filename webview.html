@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
-    />
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'unsafe-inline' 'nonce-{{CSP_NONCE}}'; script-src 'unsafe-inline' 'nonce-{{CSP_NONCE}}';"
+  />
     <title>Context Combiner</title>
     <style>
       /* Base styles matching VS Code theme */
@@ -131,30 +131,26 @@
       }
 
       .folder-icon {
-        margin-right: 4px;
-        font-size: 10px;
-        width: 12px;
-        display: inline-block;
-        transition: transform 0.1s;
-      }
+  margin-right: 4px;
+  font-size: 10px;
+  width: 12px;
+  display: inline-block;
+  transition: transform 0.1s;
+  transform: rotate(0deg);
+}
 
-      .folder-icon.expanded {
-        transform: rotate(90deg);
-      }
+.folder-icon.collapsed {
+  transform: rotate(90deg);
+}
 
       .folder-name {
         font-weight: 500;
       }
 
       .folder-children {
-        padding-left: 16px;
-        display: none;
-      }
-
-      .folder-children.expanded {
-        display: block;
-      }
-
+  padding-left: 16px;
+  display: none;
+}
       /* File icon */
       .file-icon {
         margin-right: 4px;
@@ -278,8 +274,10 @@
     </div>
 
     <script>
+      console.log('##########Webview script loaded');
       // Get VS Code API for communication with extension
       const vscode = acquireVsCodeApi();
+      console.log('##########VS Code API acquired');
 
       // State management
       let allFiles = [];
@@ -298,16 +296,17 @@
       /**
        * Initialize the extension - request file list from VS Code
        */
-      function init() {
+       function init() {
+        console.log('##########Initializing webview - requesting files');
         vscode.postMessage({ type: "getFiles" });
       }
 
       /**
        * Handle messages from the extension
        */
-      window.addEventListener("message", (event) => {
+       window.addEventListener("message", (event) => {
         const message = event.data;
-
+        console.log('##########Webview received message:', message.type);
         switch (message.type) {
           case "fileList":
             // Received list of files from extension
@@ -326,33 +325,36 @@
       /**
        * Display the list of files with checkboxes in a tree structure
        */
-      function handleFileList(files) {
-        allFiles = files;
+       function handleFileList(files) {
+  allFiles = files;
 
-        if (files.length === 0) {
-          fileListEl.innerHTML =
-            '<div class="empty-state">No files found in workspace</div>';
-          return;
-        }
+  if (files.length === 0) {
+    fileListEl.innerHTML =
+      '<div class="empty-state">No files found in workspace</div>';
+    return;
+  }
 
-        // Build tree structure
-        const tree = buildFileTree(files);
+  // Build tree structure
+  const tree = buildFileTree(files);
 
-        // Render tree
-        fileListEl.innerHTML = renderTree(tree);
+  // Render tree
+  fileListEl.innerHTML = renderTree(tree);
 
-        // Add event listeners to checkboxes
-        fileListEl
-          .querySelectorAll('input[type="checkbox"]')
-          .forEach((checkbox) => {
-            checkbox.addEventListener("change", handleFileSelection);
-          });
+  // Add event listeners to checkboxes
+  fileListEl
+    .querySelectorAll('input[type="checkbox"]')
+    .forEach((checkbox) => {
+      checkbox.addEventListener("change", handleFileSelection);
+    });
 
-        // Add event listeners to folder headers
-        fileListEl.querySelectorAll(".folder-header").forEach((header) => {
-          header.addEventListener("click", toggleFolder);
-        });
-      }
+  // Add event listeners to folder headers
+  fileListEl.querySelectorAll(".folder-header").forEach((header) => {
+    header.addEventListener("click", function(event) {
+      toggleFolder(event, this);
+    });
+  });
+}
+      
       /**
        * Handle file selection/deselection
        */
@@ -469,20 +471,26 @@
       /**
        * Toggle folder expansion
        */
-      function toggleFolder(event) {
-        const header = event.currentTarget;
-        const folderId = header.dataset.folderId;
-        const folderChildren = document.getElementById(folderId);
-        const icon = header.querySelector(".folder-icon");
+      /**
+       * Toggle folder expansion
+       */
+       function toggleFolder(event, header) {
+  const folderId = header.dataset.folderId;
+  const folderChildren = document.getElementById(folderId);
+  const icon = header.querySelector(".folder-icon");
 
-        if (folderChildren.classList.contains("expanded")) {
-          folderChildren.classList.remove("expanded");
-          icon.classList.remove("expanded");
-        } else {
-          folderChildren.classList.add("expanded");
-          icon.classList.add("expanded");
-        }
-      }
+  if (folderChildren && icon) {
+    const isCurrentlyCollapsed = folderChildren.style.display === "none" || !folderChildren.style.display;
+    
+    if (isCurrentlyCollapsed) {
+      folderChildren.style.display = "block";
+      icon.classList.remove("collapsed");
+    } else {
+      folderChildren.style.display = "none";
+      icon.classList.add("collapsed");
+    }
+  }
+}
 
       /**
        * Store file content in cache and update preview
