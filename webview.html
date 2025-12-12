@@ -253,8 +253,9 @@
       <!-- Header with action buttons -->
       <div class="header">
         <h3>📋 Context Combiner</h3>
-        <div>
-          <button id="openTabsBtn">📑 Select Tabs</button>
+        <div id="buttonContainer">
+          <button id="allTabsBtn">📑 All Tabs</button>
+          <div id="groupButtons"></div>
           <button id="selectAllBtn">Select All</button>
           <button id="deselectAllBtn">Deselect All</button>
           <button id="copyBtn" disabled>📋 Copy Combined Content</button>
@@ -307,23 +308,19 @@
       /**
  * Get files from currently open tabs
  */
-const openTabsBtn = document.getElementById("openTabsBtn");
-openTabsBtn.addEventListener("click", () => {
-  vscode.postMessage({
-    type: "getOpenTabs"
-  });
-});
-      
+ const allTabsBtn = document.getElementById("allTabsBtn");
+const groupButtonsContainer = document.getElementById("groupButtons");
 
-      /**
-       * Initialize the extension - request file list from VS Code
-       */
-       function init() {
+allTabsBtn.addEventListener("click", () => {
+  vscode.postMessage({ type: "getOpenTabs", groupIndex: -1 });
+});
+
+// Request group info on init
+function init() {
     console.log('##########Initializing webview - requesting files');
-    // Request folder state first
     vscode.postMessage({ type: "getFolderState" });
-    // Then request files (which will trigger restoration)
     vscode.postMessage({ type: "getFiles" });
+    vscode.postMessage({ type: "getTabGroups" });  // ADD THIS
 }
       /**
        * Handle messages from the extension
@@ -347,8 +344,24 @@ openTabsBtn.addEventListener("click", () => {
       case "openTabsList":
         handleOpenTabsList(message.files);
         break;
-    }
+      case "tabGroupsInfo":
+        handleTabGroups(message.groupCount);
+        break;
+        }
 });
+
+function handleTabGroups(groupCount) {
+  groupButtonsContainer.innerHTML = '';
+  
+  for (let i = 0; i < groupCount; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = `Group ${i + 1}`;
+    btn.addEventListener('click', () => {
+      vscode.postMessage({ type: "getOpenTabs", groupIndex: i });
+    });
+    groupButtonsContainer.appendChild(btn);
+  }
+}
 
       /**
        * Display the list of files with checkboxes
@@ -577,25 +590,39 @@ function restoreFolderState() {
       function handleFileContent(path, content) {
         fileContents.set(path, content);
         updatePreview();
+        updateButtons();  
       }
 
       /**
  * Handle open tabs list and select them
  */
-function handleOpenTabsList(openFiles) {
+ function handleOpenTabsList(openFiles) {
   if (!openFiles || openFiles.length === 0) {
     return;
   }
 
   openFiles.forEach(filePath => {
-    // Find the checkbox for this file
     const checkbox = document.querySelector(`input[data-path="${filePath}"]`);
     if (checkbox && !checkbox.checked) {
       checkbox.checked = true;
-      // Trigger selection handling
-      handleFileSelection({ target: checkbox });
+      selectedFiles.add(filePath);
+      
+      const fileItem = checkbox.closest('.file-item-content');
+      if (fileItem) fileItem.classList.add('selected');
+      
+      // Request file content if not cached
+      if (!fileContents.has(filePath)) {
+        vscode.postMessage({
+          type: "readFile",
+          path: filePath,
+        });
+      }
     }
   });
+  
+  // Update UI after all files selected
+  updatePreview();
+  updateButtons();
 }
 
       /**

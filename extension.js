@@ -35,6 +35,17 @@ class ContextCombinerViewProvider {
         this._folderState = {}; // Store folder expansion state
     }
 
+    async _sendTabGroupsInfo() {
+        if (!this._view) return;
+        
+        const groupCount = vscode.window.tabGroups.all.length;
+        
+        this._view.webview.postMessage({
+            type: 'tabGroupsInfo',
+            groupCount: groupCount
+        });
+    }
+
     /**
      * Called when the view is first shown or after being hidden
      */
@@ -80,7 +91,10 @@ class ContextCombinerViewProvider {
                     });
                     break;
                 case 'getOpenTabs':
-                    await this._sendOpenTabs();
+                    await this._sendOpenTabs(data.groupIndex);
+                    break;
+                case 'getTabGroups':
+                    await this._sendTabGroupsInfo();
                     break;
             }
         });
@@ -261,35 +275,47 @@ if (this._view) {
     /**
  * Get all currently open tabs and send to webview
  */
-async _sendOpenTabs() {
-    if (!this._view) return;
-
-    try {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) return;
-
-        // Get all open text editors
-        const openTabs = vscode.window.tabGroups.all
-            .flatMap(group => group.tabs)
-            .filter(tab => tab.input instanceof vscode.TabInputText)
-            .map(tab => {
-                const uri = tab.input.uri;
-                return vscode.workspace.asRelativePath(uri);
-            })
-            .filter(path => this._isTextFile(path));
-
-        // Remove duplicates
-        const uniqueTabs = [...new Set(openTabs)];
-
-        this._view.webview.postMessage({
-            type: 'openTabsList',
-            files: uniqueTabs
-        });
-    } catch (error) {
-        console.error('Error getting open tabs:', error);
-        vscode.window.showErrorMessage('Failed to get open tabs: ' + error.message);
+    async _sendOpenTabs(groupIndex = -1) {
+        if (!this._view) return;
+    
+        try {
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) return;
+    
+            let openTabs;
+            
+            if (groupIndex === -1) {
+                // Get all tabs from all groups
+                openTabs = vscode.window.tabGroups.all
+                    .flatMap(group => group.tabs)
+                    .filter(tab => tab.input instanceof vscode.TabInputText)
+                    .map(tab => vscode.workspace.asRelativePath(tab.input.uri))
+                    .filter(path => this._isTextFile(path));
+            } else {
+                // Get tabs from specific group
+                const group = vscode.window.tabGroups.all[groupIndex];
+                if (group) {
+                    openTabs = group.tabs
+                        .filter(tab => tab.input instanceof vscode.TabInputText)
+                        .map(tab => vscode.workspace.asRelativePath(tab.input.uri))
+                        .filter(path => this._isTextFile(path));
+                } else {
+                    openTabs = [];
+                }
+            }
+    
+            // Remove duplicates
+            const uniqueTabs = [...new Set(openTabs)];
+    
+            this._view.webview.postMessage({
+                type: 'openTabsList',
+                files: uniqueTabs
+            });
+        } catch (error) {
+            console.error('Error getting open tabs:', error);
+            vscode.window.showErrorMessage('Failed to get open tabs: ' + error.message);
+        }
     }
-}
 
 }
 
