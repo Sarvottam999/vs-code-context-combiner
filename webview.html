@@ -363,6 +363,37 @@ function handleTabGroups(groupCount) {
   }
 }
 
+/**
+ * Expand folders to show a specific file path
+ */
+ function expandToFile(filePath) {
+  const parts = filePath.split('/');
+  
+  // Build folder path progressively
+  for (let i = 0; i < parts.length - 1; i++) {
+    const folderPath = parts.slice(0, i + 1).join('/');
+    const folderId = `folder-${parts[i].replace(/[^a-zA-Z0-9]/g, '_')}-${i + 1}`;
+    
+    const folderChildren = document.getElementById(folderId);
+    const header = document.querySelector(`[data-folder-id="${folderId}"]`);
+    
+    if (folderChildren && header) {
+      const icon = header.querySelector(".folder-icon");
+      
+      // Expand the folder
+      folderChildren.style.display = "block";
+      if (icon) icon.classList.remove("collapsed");
+      folderState[folderId] = 'expanded';
+    }
+  }
+  
+  // Save the updated folder state
+  vscode.postMessage({
+    type: 'saveFolderState',
+    state: folderState
+  });
+}
+
       /**
        * Display the list of files with checkboxes
        */
@@ -602,6 +633,8 @@ function restoreFolderState() {
   }
 
   openFiles.forEach(filePath => {
+    expandToFile(filePath);
+
     const checkbox = document.querySelector(`input[data-path="${filePath}"]`);
     if (checkbox && !checkbox.checked) {
       checkbox.checked = true;
