@@ -341,9 +341,9 @@ function init() {
         console.log('Received folder state:', folderState);
         // Restore will be called after file list is rendered
         break;
-      case "openTabsList":
-        handleOpenTabsList(message.files);
-        break;
+        case "openTabsList":
+          handleOpenTabsList(message.files, message.deselect);
+          break;
       case "tabGroupsInfo":
         handleTabGroups(message.groupCount);
         break;
@@ -354,12 +354,29 @@ function handleTabGroups(groupCount) {
   groupButtonsContainer.innerHTML = '';
   
   for (let i = 0; i < groupCount; i++) {
-    const btn = document.createElement('button');
-    btn.textContent = `Group ${i + 1}`;
-    btn.addEventListener('click', () => {
-      vscode.postMessage({ type: "getOpenTabs", groupIndex: i });
+    const label = document.createElement('label');
+    label.style.cssText = 'display: inline-flex; align-items: center; margin-right: 10px; cursor: pointer;';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = `group-${i}`;
+    checkbox.style.cssText = 'margin-right: 4px; cursor: pointer;';
+    
+    const text = document.createTextNode(`Group ${i + 1}`);
+    
+    checkbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        // Select group tabs
+        vscode.postMessage({ type: "getOpenTabs", groupIndex: i });
+      } else {
+        // Deselect group tabs
+        vscode.postMessage({ type: "getOpenTabs", groupIndex: i, deselect: true });
+      }
     });
-    groupButtonsContainer.appendChild(btn);
+    
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    groupButtonsContainer.appendChild(label);
   }
 }
 
@@ -627,33 +644,44 @@ function restoreFolderState() {
       /**
  * Handle open tabs list and select them
  */
- function handleOpenTabsList(openFiles) {
+ function handleOpenTabsList(openFiles, deselect = false) {
   if (!openFiles || openFiles.length === 0) {
     return;
   }
 
   openFiles.forEach(filePath => {
-    expandToFile(filePath);
-
     const checkbox = document.querySelector(`input[data-path="${filePath}"]`);
-    if (checkbox && !checkbox.checked) {
-      checkbox.checked = true;
-      selectedFiles.add(filePath);
+    
+    if (deselect) {
+      // Deselect files
+      if (checkbox && checkbox.checked) {
+        checkbox.checked = false;
+        selectedFiles.delete(filePath);
+        
+        const fileItem = checkbox.closest('.file-item-content');
+        if (fileItem) fileItem.classList.remove('selected');
+      }
+    } else {
+      // Select files
+      expandToFile(filePath);
       
-      const fileItem = checkbox.closest('.file-item-content');
-      if (fileItem) fileItem.classList.add('selected');
-      
-      // Request file content if not cached
-      if (!fileContents.has(filePath)) {
-        vscode.postMessage({
-          type: "readFile",
-          path: filePath,
-        });
+      if (checkbox && !checkbox.checked) {
+        checkbox.checked = true;
+        selectedFiles.add(filePath);
+        
+        const fileItem = checkbox.closest('.file-item-content');
+        if (fileItem) fileItem.classList.add('selected');
+        
+        if (!fileContents.has(filePath)) {
+          vscode.postMessage({
+            type: "readFile",
+            path: filePath,
+          });
+        }
       }
     }
   });
   
-  // Update UI after all files selected
   updatePreview();
   updateButtons();
 }

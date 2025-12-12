@@ -90,9 +90,9 @@ class ContextCombinerViewProvider {
                         state: this._folderState
                     });
                     break;
-                case 'getOpenTabs':
-                    await this._sendOpenTabs(data.groupIndex);
-                    break;
+                    case 'getOpenTabs':
+                        await this._sendOpenTabs(data.groupIndex, data.deselect);
+                        break;
                 case 'getTabGroups':
                     await this._sendTabGroupsInfo();
                     break;
@@ -275,7 +275,7 @@ if (this._view) {
     /**
  * Get all currently open tabs and send to webview
  */
-    async _sendOpenTabs(groupIndex = -1) {
+    async _sendOpenTabs(groupIndex = -1, deselect = false) {
         if (!this._view) return;
     
         try {
@@ -285,14 +285,12 @@ if (this._view) {
             let openTabs;
             
             if (groupIndex === -1) {
-                // Get all tabs from all groups
                 openTabs = vscode.window.tabGroups.all
                     .flatMap(group => group.tabs)
                     .filter(tab => tab.input instanceof vscode.TabInputText)
                     .map(tab => vscode.workspace.asRelativePath(tab.input.uri))
                     .filter(path => this._isTextFile(path));
             } else {
-                // Get tabs from specific group
                 const group = vscode.window.tabGroups.all[groupIndex];
                 if (group) {
                     openTabs = group.tabs
@@ -304,12 +302,12 @@ if (this._view) {
                 }
             }
     
-            // Remove duplicates
             const uniqueTabs = [...new Set(openTabs)];
     
             this._view.webview.postMessage({
                 type: 'openTabsList',
-                files: uniqueTabs
+                files: uniqueTabs,
+                deselect: deselect
             });
         } catch (error) {
             console.error('Error getting open tabs:', error);
