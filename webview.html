@@ -245,6 +245,20 @@
       .file-item-content.selected:hover {
         background-color: var(--vscode-list-activeSelectionBackground);
       }
+
+      .folder-checkbox {
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+.folder-header {
+  padding: 4px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: 2px;
+  user-select: none;
+}
     </style>
   </head>
   <body>
@@ -353,30 +367,32 @@
       });
 
       function handleGroupStateCheck(groupIndex, groupFiles) {
-  const checkbox = document.getElementById(`group-${groupIndex}`);
-  if (!checkbox) return;
-  
-  // Check if all files from this group are selected
-  const allSelected = groupFiles.every(file => selectedFiles.has(file));
-  const someSelected = groupFiles.some(file => selectedFiles.has(file));
-  
-  checkbox.checked = allSelected && groupFiles.length > 0;
-}
+        const checkbox = document.getElementById(`group-${groupIndex}`);
+        if (!checkbox) return;
+
+        // Check if all files from this group are selected
+        const allSelected = groupFiles.every((file) => selectedFiles.has(file));
+        const someSelected = groupFiles.some((file) => selectedFiles.has(file));
+
+        checkbox.checked = allSelected && groupFiles.length > 0;
+      }
 
       /**
- * Update group checkbox states based on selected files
- */
-function updateGroupCheckboxes() {
-  const groupCheckboxes = groupButtonsContainer.querySelectorAll('input[type="checkbox"]');
-  
-  groupCheckboxes.forEach((checkbox, index) => {
-    // Get tabs for this group
-    vscode.postMessage({ 
-      type: "checkGroupState", 
-      groupIndex: index 
-    });
-  });
-}
+       * Update group checkbox states based on selected files
+       */
+      function updateGroupCheckboxes() {
+        const groupCheckboxes = groupButtonsContainer.querySelectorAll(
+          'input[type="checkbox"]'
+        );
+
+        groupCheckboxes.forEach((checkbox, index) => {
+          // Get tabs for this group
+          vscode.postMessage({
+            type: "checkGroupState",
+            groupIndex: index,
+          });
+        });
+      }
 
       function handleTabGroups(groupCount) {
         groupButtonsContainer.innerHTML = "";
@@ -470,19 +486,29 @@ function updateGroupCheckboxes() {
         fileListEl.innerHTML = renderTree(tree);
 
         // Add event listeners to checkboxes
-        fileListEl
-          .querySelectorAll('input[type="checkbox"]')
-          .forEach((checkbox) => {
-            checkbox.addEventListener("change", handleFileSelection);
-          });
+// Add event listeners to file checkboxes
+fileListEl
+  .querySelectorAll('.file-item input[type="checkbox"]')
+  .forEach((checkbox) => {
+    checkbox.addEventListener("change", handleFileSelection);
+  });
 
-        // Add event listeners to folder headers
-        fileListEl.querySelectorAll(".folder-header").forEach((header) => {
-          header.addEventListener("click", function (event) {
-            toggleFolder(event, this);
-          });
-        });
+// Add event listeners to folder checkboxes
+fileListEl
+  .querySelectorAll('.folder-checkbox')
+  .forEach((checkbox) => {
+    checkbox.addEventListener("change", handleFolderSelection);
+    checkbox.addEventListener("click", (e) => e.stopPropagation());
+  });
 
+// Add event listeners to folder headers (for expand/collapse)
+fileListEl.querySelectorAll(".folder-header").forEach((header) => {
+  header.addEventListener("click", function (event) {
+    if (!event.target.classList.contains('folder-checkbox')) {
+      toggleFolder(event, this);
+    }
+  });
+});
         // ADD THIS: Restore folder state after rendering
         restoreFolderState();
       }
@@ -510,7 +536,55 @@ function updateGroupCheckboxes() {
 
         updatePreview();
         updateButtons();
+
+        const folderHeader = event.target.closest('.folder');
+  if (folderHeader) {
+    const folderId = folderHeader.querySelector('.folder-header')?.dataset.folderId;
+    if (folderId) {
+      updateFolderCheckboxState(folderId);
+    }
+  }
       }
+
+
+      /**
+ * Handle folder checkbox selection - select/deselect all files in folder
+ */
+function handleFolderSelection(event) {
+  event.stopPropagation();
+  
+  const folderId = event.target.dataset.folderId;
+  const folderChildren = document.getElementById(folderId);
+  const isChecked = event.target.checked;
+  
+  if (!folderChildren) return;
+  
+  // Find all file checkboxes within this folder
+  const fileCheckboxes = folderChildren.querySelectorAll('.file-item input[type="checkbox"]');
+  
+  fileCheckboxes.forEach((checkbox) => {
+    if (checkbox.checked !== isChecked) {
+      checkbox.checked = isChecked;
+      handleFileSelection({ target: checkbox });
+    }
+  });
+}
+
+/**
+ * Update folder checkbox state based on its children
+ */
+ function updateFolderCheckboxState(folderId) {
+  const folderCheckbox = document.getElementById(`${folderId}-checkbox`);
+  const folderChildren = document.getElementById(folderId);
+  
+  if (!folderCheckbox || !folderChildren) return;
+  
+  const fileCheckboxes = folderChildren.querySelectorAll('.file-item input[type="checkbox"]');
+  const checkedCount = Array.from(fileCheckboxes).filter(cb => cb.checked).length;
+  
+  folderCheckbox.checked = checkedCount > 0 && checkedCount === fileCheckboxes.length;
+  folderCheckbox.indeterminate = checkedCount > 0 && checkedCount < fileCheckboxes.length;
+}
       /**
        * Build a tree structure from flat file list
        */
@@ -587,21 +661,23 @@ function updateGroupCheckboxes() {
           /[^a-zA-Z0-9]/g,
           "_"
         )}-${level}`;
+        const folderCheckboxId = `${folderId}-checkbox`;
         const childrenHtml = sortedChildren
           .map((child) => renderTree(child, level + 1))
           .join("");
 
         return `
-        <div class="folder">
-            <div class="folder-header" data-folder-id="${folderId}">
-                <span class="folder-icon">▶</span>
-                <span class="folder-name">📁 ${node.name}</span>
-            </div>
-            <div class="folder-children" id="${folderId}">
-                ${childrenHtml}
-            </div>
-        </div>
-    `;
+<div class="folder">
+    <div class="folder-header" data-folder-id="${folderId}">
+        <input type="checkbox" class="folder-checkbox" id="${folderCheckboxId}" data-folder-id="${folderId}">
+        <span class="folder-icon">▶</span>
+        <span class="folder-name">📁 ${node.name}</span>
+    </div>
+    <div class="folder-children" id="${folderId}">
+        ${childrenHtml}
+    </div>
+</div>
+`;
       }
 
       /**
@@ -827,8 +903,16 @@ function updateGroupCheckboxes() {
               handleFileSelection({ target: checkbox });
             }
           });
-          updateGroupCheckboxes();
+        updateGroupCheckboxes();
 
+        // Update parent folder checkbox state
+// const folderHeader = event.target.closest('.folder');
+// if (folderHeader) {
+//   const folderId = folderHeader.querySelector('.folder-header')?.dataset.folderId;
+//   if (folderId) {
+//     updateFolderCheckboxState(folderId);
+//   }
+// }
       });
 
       /**
@@ -844,9 +928,11 @@ function updateGroupCheckboxes() {
             }
           });
 
-          groupButtonsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.checked = false;
-  });
+        groupButtonsContainer
+          .querySelectorAll('input[type="checkbox"]')
+          .forEach((cb) => {
+            cb.checked = false;
+          });
       });
 
       // Initialize when page loads
