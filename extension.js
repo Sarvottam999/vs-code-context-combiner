@@ -45,6 +45,30 @@ class ContextCombinerViewProvider {
             groupCount: groupCount
         });
     }
+    async _checkGroupState(groupIndex) {
+        if (!this._view) return;
+        
+        try {
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) return;
+            
+            const group = vscode.window.tabGroups.all[groupIndex];
+            if (group) {
+                const groupFiles = group.tabs
+                    .filter(tab => tab.input instanceof vscode.TabInputText)
+                    .map(tab => vscode.workspace.asRelativePath(tab.input.uri))
+                    .filter(path => this._isTextFile(path));
+                
+                this._view.webview.postMessage({
+                    type: 'groupStateCheck',
+                    groupIndex: groupIndex,
+                    files: [...new Set(groupFiles)]
+                });
+            }
+        } catch (error) {
+            console.error('Error checking group state:', error);
+        }
+    }
 
     /**
      * Called when the view is first shown or after being hidden
@@ -95,6 +119,9 @@ class ContextCombinerViewProvider {
                         break;
                 case 'getTabGroups':
                     await this._sendTabGroupsInfo();
+                    break;
+                case 'checkGroupState':
+                    await this._checkGroupState(data.groupIndex);
                     break;
             }
         });

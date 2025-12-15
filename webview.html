@@ -237,15 +237,14 @@
         background: var(--vscode-scrollbarSlider-activeBackground);
       }
 
-
       .file-item-content.selected {
-  background-color: var(--vscode-list-activeSelectionBackground);
-  color: var(--vscode-list-activeSelectionForeground);
-}
+        background-color: var(--vscode-list-activeSelectionBackground);
+        color: var(--vscode-list-activeSelectionForeground);
+      }
 
-.file-item-content.selected:hover {
-  background-color: var(--vscode-list-activeSelectionBackground);
-}
+      .file-item-content.selected:hover {
+        background-color: var(--vscode-list-activeSelectionBackground);
+      }
     </style>
   </head>
   <body>
@@ -306,110 +305,148 @@
       const selectAllBtn = document.getElementById("selectAllBtn");
       const deselectAllBtn = document.getElementById("deselectAllBtn");
       /**
- * Get files from currently open tabs
- */
- const allTabsBtn = document.getElementById("allTabsBtn");
-const groupButtonsContainer = document.getElementById("groupButtons");
+       * Get files from currently open tabs
+       */
+      const allTabsBtn = document.getElementById("allTabsBtn");
+      const groupButtonsContainer = document.getElementById("groupButtons");
 
-allTabsBtn.addEventListener("click", () => {
-  vscode.postMessage({ type: "getOpenTabs", groupIndex: -1 });
-});
+      allTabsBtn.addEventListener("click", () => {
+        vscode.postMessage({ type: "getOpenTabs", groupIndex: -1 });
+      });
 
-// Request group info on init
-function init() {
-    console.log('##########Initializing webview - requesting files');
-    vscode.postMessage({ type: "getFolderState" });
-    vscode.postMessage({ type: "getFiles" });
-    vscode.postMessage({ type: "getTabGroups" });  // ADD THIS
-}
+      // Request group info on init
+      function init() {
+        console.log("##########Initializing webview - requesting files");
+        vscode.postMessage({ type: "getFolderState" });
+        vscode.postMessage({ type: "getFiles" });
+        vscode.postMessage({ type: "getTabGroups" }); // ADD THIS
+      }
       /**
        * Handle messages from the extension
        */
-       window.addEventListener("message", (event) => {
-    const message = event.data;
-    console.log('##########Webview received message:', message.type);
-    switch (message.type) {
-      case "fileList":
-        handleFileList(message.files);
-        break;
-      case "fileContent":
-        handleFileContent(message.path, message.content);
-        break;
-      case "folderState":
-        // Just store the state, don't restore yet
-        folderState = message.state || {};
-        console.log('Received folder state:', folderState);
-        // Restore will be called after file list is rendered
-        break;
-        case "openTabsList":
-          handleOpenTabsList(message.files, message.deselect);
-          break;
-      case "tabGroupsInfo":
-        handleTabGroups(message.groupCount);
-        break;
+      window.addEventListener("message", (event) => {
+        const message = event.data;
+        console.log("##########Webview received message:", message.type);
+        switch (message.type) {
+          case "fileList":
+            handleFileList(message.files);
+            break;
+          case "fileContent":
+            handleFileContent(message.path, message.content);
+            break;
+          case "folderState":
+            // Just store the state, don't restore yet
+            folderState = message.state || {};
+            console.log("Received folder state:", folderState);
+            // Restore will be called after file list is rendered
+            break;
+          case "openTabsList":
+            handleOpenTabsList(message.files, message.deselect);
+            break;
+          case "tabGroupsInfo":
+            handleTabGroups(message.groupCount);
+            break;
+          case "groupStateCheck":
+            handleGroupStateCheck(message.groupIndex, message.files);
+            break;
         }
-});
+      });
 
-function handleTabGroups(groupCount) {
-  groupButtonsContainer.innerHTML = '';
+      function handleGroupStateCheck(groupIndex, groupFiles) {
+  const checkbox = document.getElementById(`group-${groupIndex}`);
+  if (!checkbox) return;
   
-  for (let i = 0; i < groupCount; i++) {
-    const label = document.createElement('label');
-    label.style.cssText = 'display: inline-flex; align-items: center; margin-right: 10px; cursor: pointer;';
-    
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.id = `group-${i}`;
-    checkbox.style.cssText = 'margin-right: 4px; cursor: pointer;';
-    
-    const text = document.createTextNode(`Group ${i + 1}`);
-    
-    checkbox.addEventListener('change', (e) => {
-      if (e.target.checked) {
-        // Select group tabs
-        vscode.postMessage({ type: "getOpenTabs", groupIndex: i });
-      } else {
-        // Deselect group tabs
-        vscode.postMessage({ type: "getOpenTabs", groupIndex: i, deselect: true });
-      }
-    });
-    
-    label.appendChild(checkbox);
-    label.appendChild(text);
-    groupButtonsContainer.appendChild(label);
-  }
+  // Check if all files from this group are selected
+  const allSelected = groupFiles.every(file => selectedFiles.has(file));
+  const someSelected = groupFiles.some(file => selectedFiles.has(file));
+  
+  checkbox.checked = allSelected && groupFiles.length > 0;
 }
 
-/**
- * Expand folders to show a specific file path
+      /**
+ * Update group checkbox states based on selected files
  */
- function expandToFile(filePath) {
-  const parts = filePath.split('/');
+function updateGroupCheckboxes() {
+  const groupCheckboxes = groupButtonsContainer.querySelectorAll('input[type="checkbox"]');
   
-  // Build folder path progressively
-  for (let i = 0; i < parts.length - 1; i++) {
-    const folderPath = parts.slice(0, i + 1).join('/');
-    const folderId = `folder-${parts[i].replace(/[^a-zA-Z0-9]/g, '_')}-${i + 1}`;
-    
-    const folderChildren = document.getElementById(folderId);
-    const header = document.querySelector(`[data-folder-id="${folderId}"]`);
-    
-    if (folderChildren && header) {
-      const icon = header.querySelector(".folder-icon");
-      
-      // Expand the folder
-      folderChildren.style.display = "block";
-      if (icon) icon.classList.remove("collapsed");
-      folderState[folderId] = 'expanded';
-    }
-  }
-  
-  // Save the updated folder state
-  vscode.postMessage({
-    type: 'saveFolderState',
-    state: folderState
+  groupCheckboxes.forEach((checkbox, index) => {
+    // Get tabs for this group
+    vscode.postMessage({ 
+      type: "checkGroupState", 
+      groupIndex: index 
+    });
   });
 }
+
+      function handleTabGroups(groupCount) {
+        groupButtonsContainer.innerHTML = "";
+
+        for (let i = 0; i < groupCount; i++) {
+          const label = document.createElement("label");
+          label.style.cssText =
+            "display: inline-flex; align-items: center; margin-right: 10px; cursor: pointer;";
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.id = `group-${i}`;
+          checkbox.style.cssText = "margin-right: 4px; cursor: pointer;";
+
+          const text = document.createTextNode(`Group ${i + 1}`);
+
+          checkbox.addEventListener("change", (e) => {
+            if (e.target.checked) {
+              // Select group tabs
+              vscode.postMessage({ type: "getOpenTabs", groupIndex: i });
+            } else {
+              // Deselect group tabs
+              vscode.postMessage({
+                type: "getOpenTabs",
+                groupIndex: i,
+                deselect: true,
+              });
+            }
+          });
+
+          label.appendChild(checkbox);
+          label.appendChild(text);
+          groupButtonsContainer.appendChild(label);
+        }
+      }
+
+      /**
+       * Expand folders to show a specific file path
+       */
+      function expandToFile(filePath) {
+        const parts = filePath.split("/");
+
+        // Build folder path progressively
+        for (let i = 0; i < parts.length - 1; i++) {
+          const folderPath = parts.slice(0, i + 1).join("/");
+          const folderId = `folder-${parts[i].replace(/[^a-zA-Z0-9]/g, "_")}-${
+            i + 1
+          }`;
+
+          const folderChildren = document.getElementById(folderId);
+          const header = document.querySelector(
+            `[data-folder-id="${folderId}"]`
+          );
+
+          if (folderChildren && header) {
+            const icon = header.querySelector(".folder-icon");
+
+            // Expand the folder
+            folderChildren.style.display = "block";
+            if (icon) icon.classList.remove("collapsed");
+            folderState[folderId] = "expanded";
+          }
+        }
+
+        // Save the updated folder state
+        vscode.postMessage({
+          type: "saveFolderState",
+          state: folderState,
+        });
+      }
 
       /**
        * Display the list of files with checkboxes
@@ -417,63 +454,63 @@ function handleTabGroups(groupCount) {
       /**
        * Display the list of files with checkboxes in a tree structure
        */
-       function handleFileList(files) {
-  allFiles = files;
+      function handleFileList(files) {
+        allFiles = files;
 
-  if (files.length === 0) {
-    fileListEl.innerHTML =
-      '<div class="empty-state">No files found in workspace</div>';
-    return;
-  }
+        if (files.length === 0) {
+          fileListEl.innerHTML =
+            '<div class="empty-state">No files found in workspace</div>';
+          return;
+        }
 
-  // Build tree structure
-  const tree = buildFileTree(files);
+        // Build tree structure
+        const tree = buildFileTree(files);
 
-  // Render tree
-  fileListEl.innerHTML = renderTree(tree);
+        // Render tree
+        fileListEl.innerHTML = renderTree(tree);
 
-  // Add event listeners to checkboxes
-  fileListEl
-    .querySelectorAll('input[type="checkbox"]')
-    .forEach((checkbox) => {
-      checkbox.addEventListener("change", handleFileSelection);
-    });
+        // Add event listeners to checkboxes
+        fileListEl
+          .querySelectorAll('input[type="checkbox"]')
+          .forEach((checkbox) => {
+            checkbox.addEventListener("change", handleFileSelection);
+          });
 
-  // Add event listeners to folder headers
-  fileListEl.querySelectorAll(".folder-header").forEach((header) => {
-    header.addEventListener("click", function(event) {
-      toggleFolder(event, this);
-    });
-  });
+        // Add event listeners to folder headers
+        fileListEl.querySelectorAll(".folder-header").forEach((header) => {
+          header.addEventListener("click", function (event) {
+            toggleFolder(event, this);
+          });
+        });
 
-  // ADD THIS: Restore folder state after rendering
-  restoreFolderState();
-}
+        // ADD THIS: Restore folder state after rendering
+        restoreFolderState();
+      }
       /**
        * Handle file selection/deselection
        */
-       function handleFileSelection(event) {
-  const filePath = event.target.dataset.path;
-  const fileItem = event.target.closest('.file-item-content');
+      function handleFileSelection(event) {
+        const filePath = event.target.dataset.path;
+        const fileItem = event.target.closest(".file-item-content");
 
-  if (event.target.checked) {
-    selectedFiles.add(filePath);
-    if (fileItem) fileItem.classList.add('selected');
-    // Request file content if not already cached
-    if (!fileContents.has(filePath)) {
-      vscode.postMessage({
-        type: "readFile",
-        path: filePath,
-      });
-    }
-  } else {
-    selectedFiles.delete(filePath);
-    if (fileItem) fileItem.classList.remove('selected');
-  }
+        if (event.target.checked) {
+          selectedFiles.add(filePath);
+          if (fileItem) fileItem.classList.add("selected");
+          // Request file content if not already cached
+          if (!fileContents.has(filePath)) {
+            vscode.postMessage({
+              type: "readFile",
+              path: filePath,
+            });
+          }
+        } else {
+          selectedFiles.delete(filePath);
+          if (fileItem) fileItem.classList.remove("selected");
+        }
 
-  updatePreview();
-  updateButtons();
-}
+        updatePreview();
+        updateButtons();
+      }
       /**
        * Build a tree structure from flat file list
        */
@@ -546,8 +583,11 @@ function handleTabGroups(groupCount) {
             .join("");
         }
 
-        const folderId = `folder-${node.name.replace(/[^a-zA-Z0-9]/g, '_')}-${level}`;
-                const childrenHtml = sortedChildren
+        const folderId = `folder-${node.name.replace(
+          /[^a-zA-Z0-9]/g,
+          "_"
+        )}-${level}`;
+        const childrenHtml = sortedChildren
           .map((child) => renderTree(child, level + 1))
           .join("");
 
@@ -570,67 +610,77 @@ function handleTabGroups(groupCount) {
       /**
        * Toggle folder expansion
        */
-       function toggleFolder(event, header) {
-    const folderId = header.dataset.folderId;
-    const folderChildren = document.getElementById(folderId);
-    const icon = header.querySelector(".folder-icon");
+      function toggleFolder(event, header) {
+        const folderId = header.dataset.folderId;
+        const folderChildren = document.getElementById(folderId);
+        const icon = header.querySelector(".folder-icon");
 
-    if (folderChildren && icon) {
-        const isCurrentlyCollapsed = folderChildren.style.display === "none" || !folderChildren.style.display;
-        
-        if (isCurrentlyCollapsed) {
+        if (folderChildren && icon) {
+          const isCurrentlyCollapsed =
+            folderChildren.style.display === "none" ||
+            !folderChildren.style.display;
+
+          if (isCurrentlyCollapsed) {
             folderChildren.style.display = "block";
             icon.classList.remove("collapsed");
-            folderState[folderId] = 'expanded';
-        } else {
+            folderState[folderId] = "expanded";
+          } else {
             folderChildren.style.display = "none";
-            icon.classList.add("collapsed");combiner
-            folderState[folderId] = 'collapsed';
+            icon.classList.add("collapsed");
+            combiner;
+            folderState[folderId] = "collapsed";
+          }
+
+          console.log(
+            "Toggled folder:",
+            folderId,
+            "New state:",
+            folderState[folderId]
+          );
+          console.log("Current folder state:", folderState);
+
+          // Save state to extension
+          vscode.postMessage({
+            type: "saveFolderState",
+            state: folderState,
+          });
         }
-        
-        console.log('Toggled folder:', folderId, 'New state:', folderState[folderId]);
-        console.log('Current folder state:', folderState);
-        
-        // Save state to extension
-        vscode.postMessage({
-            type: 'saveFolderState',
-            state: folderState
-        });
-    }
-}
+      }
       /**
        * Restore folder expansion state from saved state
        */
-    /**
- * Restore folder expansion state from saved state
- */
-function restoreFolderState() {
-    console.log('Restoring folder state:', folderState);
-    
-    if (!folderState || Object.keys(folderState).length === 0) {
-        console.log('No folder state to restore');
-        return;
-    }
-    
-    Object.keys(folderState).forEach(folderId => {
-        const folderChildren = document.getElementById(folderId);
-        const header = document.querySelector(`[data-folder-id="${folderId}"]`);
-        
-        console.log(`Restoring folder ${folderId}:`, folderState[folderId]);
-        
-        if (folderChildren && header) {
-            const icon = header.querySelector(".folder-icon");
-            
-            if (folderState[folderId] === 'expanded') {
-                folderChildren.style.display = "block";
-                if (icon) icon.classList.remove("collapsed");
-            } else if (folderState[folderId] === 'collapsed') {
-                folderChildren.style.display = "none";
-                if (icon) icon.classList.add("collapsed");
-            }
+      /**
+       * Restore folder expansion state from saved state
+       */
+      function restoreFolderState() {
+        console.log("Restoring folder state:", folderState);
+
+        if (!folderState || Object.keys(folderState).length === 0) {
+          console.log("No folder state to restore");
+          return;
         }
-    });
-}
+
+        Object.keys(folderState).forEach((folderId) => {
+          const folderChildren = document.getElementById(folderId);
+          const header = document.querySelector(
+            `[data-folder-id="${folderId}"]`
+          );
+
+          console.log(`Restoring folder ${folderId}:`, folderState[folderId]);
+
+          if (folderChildren && header) {
+            const icon = header.querySelector(".folder-icon");
+
+            if (folderState[folderId] === "expanded") {
+              folderChildren.style.display = "block";
+              if (icon) icon.classList.remove("collapsed");
+            } else if (folderState[folderId] === "collapsed") {
+              folderChildren.style.display = "none";
+              if (icon) icon.classList.add("collapsed");
+            }
+          }
+        });
+      }
 
       /**
        * Store file content in cache and update preview
@@ -638,53 +688,55 @@ function restoreFolderState() {
       function handleFileContent(path, content) {
         fileContents.set(path, content);
         updatePreview();
-        updateButtons();  
+        updateButtons();
       }
 
       /**
- * Handle open tabs list and select them
- */
- function handleOpenTabsList(openFiles, deselect = false) {
-  if (!openFiles || openFiles.length === 0) {
-    return;
-  }
-
-  openFiles.forEach(filePath => {
-    const checkbox = document.querySelector(`input[data-path="${filePath}"]`);
-    
-    if (deselect) {
-      // Deselect files
-      if (checkbox && checkbox.checked) {
-        checkbox.checked = false;
-        selectedFiles.delete(filePath);
-        
-        const fileItem = checkbox.closest('.file-item-content');
-        if (fileItem) fileItem.classList.remove('selected');
-      }
-    } else {
-      // Select files
-      expandToFile(filePath);
-      
-      if (checkbox && !checkbox.checked) {
-        checkbox.checked = true;
-        selectedFiles.add(filePath);
-        
-        const fileItem = checkbox.closest('.file-item-content');
-        if (fileItem) fileItem.classList.add('selected');
-        
-        if (!fileContents.has(filePath)) {
-          vscode.postMessage({
-            type: "readFile",
-            path: filePath,
-          });
+       * Handle open tabs list and select them
+       */
+      function handleOpenTabsList(openFiles, deselect = false) {
+        if (!openFiles || openFiles.length === 0) {
+          return;
         }
+
+        openFiles.forEach((filePath) => {
+          const checkbox = document.querySelector(
+            `input[data-path="${filePath}"]`
+          );
+
+          if (deselect) {
+            // Deselect files
+            if (checkbox && checkbox.checked) {
+              checkbox.checked = false;
+              selectedFiles.delete(filePath);
+
+              const fileItem = checkbox.closest(".file-item-content");
+              if (fileItem) fileItem.classList.remove("selected");
+            }
+          } else {
+            // Select files
+            expandToFile(filePath);
+
+            if (checkbox && !checkbox.checked) {
+              checkbox.checked = true;
+              selectedFiles.add(filePath);
+
+              const fileItem = checkbox.closest(".file-item-content");
+              if (fileItem) fileItem.classList.add("selected");
+
+              if (!fileContents.has(filePath)) {
+                vscode.postMessage({
+                  type: "readFile",
+                  path: filePath,
+                });
+              }
+            }
+          }
+        });
+
+        updatePreview();
+        updateButtons();
       }
-    }
-  });
-  
-  updatePreview();
-  updateButtons();
-}
 
       /**
        * Update the preview pane with combined content
@@ -775,6 +827,8 @@ function restoreFolderState() {
               handleFileSelection({ target: checkbox });
             }
           });
+          updateGroupCheckboxes();
+
       });
 
       /**
@@ -789,6 +843,10 @@ function restoreFolderState() {
               handleFileSelection({ target: checkbox });
             }
           });
+
+          groupButtonsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.checked = false;
+  });
       });
 
       // Initialize when page loads
